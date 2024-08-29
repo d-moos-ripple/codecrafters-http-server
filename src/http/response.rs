@@ -1,4 +1,4 @@
-use super::message::{Startline};
+use super::message::Startline;
 
 pub struct StatusLine {
     version: String,
