@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 
 pub type Request = HttpMessage<RequestLine>;
 
+#[allow(dead_code)]
 pub struct RequestLine {
     pub method: String,
     pub target: String,
@@ -57,6 +58,7 @@ fn parse_headers(raw: &str) -> Result<HashMap<String, String>> {
     Ok(headers)
 }
 
+#[cfg(test)]
 mod tests {
     use std::collections::HashMap;
     use crate::http::request::{parse_headers, parse_requestline};

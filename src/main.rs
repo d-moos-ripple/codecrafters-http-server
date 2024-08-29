@@ -1,5 +1,5 @@
 use std::{collections::HashMap, io::{Read, Write}, net::TcpListener};
-use http::{message::HttpMessage, request::Request, response::{Response, StatusLine}};
+use http::{message::HttpMessage, request::Request, response::StatusLine};
 
 mod http;
 
@@ -15,15 +15,22 @@ fn main() {
                 println!("accepted new connection");
                 let mut raw_request = String::new();
                 _stream.read_to_string(&mut raw_request).expect("could not read request");
+
+                // parsing raw request into a struct
                 let request = Request::try_from(raw_request).expect("could not parse request");
 
+                // start building the response...
+                // ...status line
                 let status_line = if request.start_line.target == "/" {
                     StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"))
                 } else {
                     StatusLine::new(String::from("HTTP/1.1"), 404, String::from("Not Found"))
                 };
 
+                // actual message struct
                 let response_raw = HttpMessage::<StatusLine>::new(status_line, HashMap::new());
+
+                // convert into raw response
                 let response = Into::<String>::into(response_raw);
                 println!("{:?}", response);
 

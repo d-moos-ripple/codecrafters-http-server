@@ -3,7 +3,7 @@ use std::collections::HashMap;
 pub(crate) struct HttpMessage<T: Startline> {
     pub start_line: T,
     headers: HashMap<String, String>,
-    body: Option<u32>
+    _body: Option<u32>
 }
 
 impl<T: Startline> HttpMessage<T> {
@@ -14,7 +14,7 @@ impl<T: Startline> HttpMessage<T> {
         Self {
             start_line,
             headers,
-            body: None
+            _body: None
         }
     }
 }
@@ -34,6 +34,7 @@ impl<T: Startline + Into<String>> Into<String> for HttpMessage<T>  {
 
 pub(crate) trait Startline {}
 
+#[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 

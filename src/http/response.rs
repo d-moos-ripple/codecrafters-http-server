@@ -1,6 +1,4 @@
-use super::message::{HttpMessage, Startline};
-
-pub type Response = HttpMessage<StatusLine>;
+use super::message::{Startline};
 
 pub struct StatusLine {
     version: String,
