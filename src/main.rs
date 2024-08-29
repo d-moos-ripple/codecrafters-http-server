@@ -30,7 +30,7 @@ fn main() {
                 _stream.write_all(response.as_bytes()).expect("could not send response");
             }
             Err(e) => {
-                println!("errdor: {}", e);
+                println!("error: {}", e);
             }
         }
     }
