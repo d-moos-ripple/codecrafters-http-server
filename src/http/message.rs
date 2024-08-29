@@ -43,12 +43,12 @@ mod tests {
 
     #[test]
     fn ok_response() {
-        let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
+        let status_line = StatusLine::new(String::from("HTTP/1.1"), 404, String::from("Not Found"));
         let response = HttpMessage::<StatusLine>::new(status_line, HashMap::new());
 
         assert_eq!(
             Into::<String>::into(response),
-            "HTTP/1.1 200 OK\r\n\r\n"
+            "HTTP/1.1 404 Not Found\r\n\r\n"
         );
     }
 }
