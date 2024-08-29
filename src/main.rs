@@ -23,9 +23,11 @@ fn main() {
                     StatusLine::new(String::from("HTTP/1.1"), 404, String::from("Not Found"))
                 };
 
-                let response = HttpMessage::<StatusLine>::new(status_line, HashMap::new());
+                let response_raw = HttpMessage::<StatusLine>::new(status_line, HashMap::new());
+                let response = Into::<String>::into(response_raw);
+                println!("{:?}", response);
 
-                _stream.write_all(Into::<String>::into(response).as_bytes()).expect("could not send response");
+                _stream.write_all(response.as_bytes()).expect("could not send response");
             }
             Err(e) => {
                 println!("errdor: {}", e);
