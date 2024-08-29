@@ -25,7 +25,7 @@ fn main() {
 
                 let response_raw = HttpMessage::<StatusLine>::new(status_line, HashMap::new());
                 let response = Into::<String>::into(response_raw);
-                println!("{:?}", response);
+                println!("{:?}", response.as_bytes());
 
                 _stream.write_all(response.as_bytes()).expect("could not send response");
             }
