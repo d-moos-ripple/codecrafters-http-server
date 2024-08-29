@@ -28,7 +28,7 @@ fn main() {
                 _stream.write_all(Into::<String>::into(response).as_bytes()).expect("could not send response");
             }
             Err(e) => {
-                println!("error: {}", e);
+                println!("errdor: {}", e);
             }
         }
     }
