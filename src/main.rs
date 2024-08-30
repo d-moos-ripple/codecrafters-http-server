@@ -14,6 +14,11 @@ fn main() {
         .add("/echo/{yolo}".to_string(), Box::new(handle_echo))
         .expect("could not add endpoint");
 
+    // TODO: add / endpoint and retunr 200 (empty)
+    router
+        .add("/".to_string(), Box::new(handle_root))
+        .expect("could not add endpoint");
+
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
@@ -85,7 +90,7 @@ fn handle_echo(request: &Request) -> Result<HttpMessage<StatusLine>> {
     // cheating. :) let's improve so that we receive the path-wildcard as an argument
     let (_, input) = request.start_line.target[1..]
         .split_once("/")
-        .context("could not parse the inpust")?;
+        .context("could not parse the input")?;
 
     let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
     let headers = HashMap::from([
@@ -97,4 +102,10 @@ fn handle_echo(request: &Request) -> Result<HttpMessage<StatusLine>> {
     message.write(input.to_string());
 
     Ok(message)
+}
+
+fn handle_root(_: &Request) -> Result<HttpMessage<StatusLine>> {
+    let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
+
+    Ok(HttpMessage::<StatusLine>::new(status_line, HashMap::new()))
 }
