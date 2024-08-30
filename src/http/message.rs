@@ -15,6 +15,10 @@ impl<T: Startline> HttpMessage<T> {
             body: None,
         }
     }
+
+    pub fn write(&mut self, body: String) {
+        self.body = Some(body);
+    }
 }
 
 impl<T: Startline + Into<String>> Into<String> for HttpMessage<T> {

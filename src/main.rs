@@ -82,8 +82,7 @@ fn not_found(_: &Request) -> Result<HttpMessage<StatusLine>> {
 }
 
 fn handle_echo(request: &Request) -> Result<HttpMessage<StatusLine>> {
-    // /echo/{msg}
-
+    // cheating. :) let's improve so that we receive the path-wildcard as an argument
     let (_, input) = request.start_line.target[1..]
         .split_once("/")
         .context("could not parse the input")?;
@@ -94,5 +93,8 @@ fn handle_echo(request: &Request) -> Result<HttpMessage<StatusLine>> {
         ("Content-Length".to_string(), input.len().to_string()),
     ]);
 
-    Ok(HttpMessage::<StatusLine>::new(status_line, headers))
+    let mut message = HttpMessage::<StatusLine>::new(status_line, headers);
+    message.write(input.to_string());
+
+    Ok(message)
 }

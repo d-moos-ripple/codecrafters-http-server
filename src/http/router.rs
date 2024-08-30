@@ -18,6 +18,11 @@ pub struct Router {
 // { } wildcard pattern
 const PATTERN: &str = r"\{.*?\}";
 
+enum RouteMatch {
+    Match(Option<String>),
+    NoMatch,
+}
+
 impl Router {
     pub fn new(default: Callback) -> Self {
         Self {
@@ -50,11 +55,12 @@ impl Router {
             HashMap::default(),
         );
 
+        // todo pass actual matched wildcard (if any)
         let callback = self
             .endpoints
             .iter()
-            // find matching endpoints
-            .filter(|(p, _)| Router::is_match(p, target))
+            .map(|(p, c)| (Router::match_target(p, target), c)) // find matching endpoints
+            .filter(|(m, _)| matches!(m, RouteMatch::Match(_)))
             // select the first match
             .next()
             // return only the callback
@@ -65,7 +71,7 @@ impl Router {
         callback(request).unwrap_or(internal_server_error)
     }
 
-    fn is_match(path: &String, target: &String) -> bool {
+    fn match_target(path: &String, target: &String) -> RouteMatch {
         let regex = Regex::new(PATTERN).expect("regex issue");
         if regex.is_match(path) {
             // our registered endpoint is a wildcard
@@ -75,19 +81,18 @@ impl Router {
             let pattern = re
                 .replace_all(path.replace("/", r"\/").as_str(), r"(.*?)")
                 .to_string();
-            if Regex::new(pattern.as_str())
-                .expect("not a valid pattern")
-                .is_match(target)
-            {
-                return true;
+
+            let actual_route_regex = Regex::new(pattern.as_str()).expect("invalid regex");
+            if let Some(captures) = actual_route_regex.captures(target) {
+                return RouteMatch::Match(Some(captures.get(1).unwrap().as_str().to_string()));
             }
         } else {
             // endpoint is static
             if path == target {
-                return true;
+                return RouteMatch::Match(None);
             }
         }
 
-        false
+        RouteMatch::NoMatch
     }
 }
