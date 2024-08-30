@@ -85,7 +85,7 @@ fn handle_echo(request: &Request) -> Result<HttpMessage<StatusLine>> {
     // cheating. :) let's improve so that we receive the path-wildcard as an argument
     let (_, input) = request.start_line.target[1..]
         .split_once("/")
-        .context("could not parse the input")?;
+        .context("could not parse the inpust")?;
 
     let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
     let headers = HashMap::from([
