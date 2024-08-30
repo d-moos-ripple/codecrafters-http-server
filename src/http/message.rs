@@ -1,34 +1,37 @@
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub(crate) struct HttpMessage<T: Startline> {
     pub start_line: T,
     headers: HashMap<String, String>,
-    _body: Option<u32>
+    _body: Option<u32>,
 }
 
 impl<T: Startline> HttpMessage<T> {
-    pub fn new(
-        start_line: T,
-        headers: HashMap<String, String>
-    ) -> Self {
+    pub fn new(start_line: T, headers: HashMap<String, String>) -> Self {
         Self {
             start_line,
             headers,
-            _body: None
+            _body: None,
         }
     }
 }
 
-impl<T: Startline + Into<String>> Into<String> for HttpMessage<T>  {
+impl<T: Startline + Into<String>> Into<String> for HttpMessage<T> {
     fn into(self) -> String {
-        let header_string = self.headers
-        .iter()
-        .map(|(k, v)| format!("{}: {}", k, v))
-        .collect::<Vec<String>>()
-        .join("\r\n")
-        ;
+        let header_string = self
+            .headers
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, v))
+            .collect::<Vec<String>>()
+            .join("\r\n");
 
-        format!("{}\r\n{}\r\n{}", self.start_line.into(), header_string, String::new())
+        format!(
+            "{}\r\n{}\r\n{}",
+            self.start_line.into(),
+            header_string,
+            String::new()
+        )
     }
 }
 

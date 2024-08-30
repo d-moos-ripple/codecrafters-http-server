@@ -1,22 +1,28 @@
-use std::{collections::HashMap, io::{Read, Write}, net::TcpListener};
-use bytes::buf;
-use http::{message::HttpMessage, request::Request, response::StatusLine};
+use anyhow::{Context, Result};
+use http::{message::HttpMessage, request::Request, response::StatusLine, router::Router};
+use std::{
+    collections::HashMap,
+    io::{Read, Write},
+    net::TcpListener,
+};
 
 mod http;
 
-
 fn main() {
-    println!("Logs from your program will appear here!");
+    let mut router = Router::new(Box::new(not_found));
+    router
+        .add("/echo/{yolo}".to_string(), Box::new(handle_echo))
+        .expect("could not add endpoint");
 
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
-    
+
     for stream in listener.incoming() {
         match stream {
             Ok(mut _stream) => {
                 println!("accepted new connection");
                 let mut raw_request = String::new();
 
-                // GPT 
+                // GPT: sometimes we do not receive an EOF marker so we read it one by one...
                 let mut buffer = [0; 1024];
                 let mut request = Vec::new();
 
@@ -44,32 +50,49 @@ fn main() {
                 }
                 // GPT
 
-                // _stream.read_to_string(&mut raw_request).expect("could not read request");
-                
-
                 // parsing raw request into a struct
                 let request = Request::try_from(raw_request).expect("could not parse request");
 
-                // start building the response...
-                // ...status line
-                let status_line = if request.start_line.target == "/" {
-                    StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"))
-                } else {
-                    StatusLine::new(String::from("HTTP/1.1"), 404, String::from("Not Found"))
-                };
-
-                // actual message struct
-                let response_raw = HttpMessage::<StatusLine>::new(status_line, HashMap::new());
+                // TODO:
+                // implement endpoint routing
+                let response_raw = router.execute(&request.start_line.target, &request);
 
                 // convert into raw response
                 let response = Into::<String>::into(response_raw);
                 println!("{:?}", response);
 
-                _stream.write_all(response.as_bytes()).expect("could not send response");
+                _stream
+                    .write_all(response.as_bytes())
+                    .expect("could not send response");
             }
             Err(e) => {
                 println!("error: {}", e);
             }
         }
     }
+}
+
+fn not_found(_: &Request) -> Result<HttpMessage<StatusLine>> {
+    let status_line = StatusLine::new(String::from("HTTP/1.1"), 404, String::from("Not Found"));
+
+    Ok(HttpMessage::<StatusLine>::new(
+        status_line,
+        HashMap::default(),
+    ))
+}
+
+fn handle_echo(request: &Request) -> Result<HttpMessage<StatusLine>> {
+    // /echo/{msg}
+
+    let (_, input) = request.start_line.target[1..]
+        .split_once("/")
+        .context("could not parse the input")?;
+
+    let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
+    let headers = HashMap::from([
+        ("Content-Type".to_string(), "text/plain".to_string()),
+        ("Content-Length".to_string(), input.len().to_string()),
+    ]);
+
+    Ok(HttpMessage::<StatusLine>::new(status_line, headers))
 }
