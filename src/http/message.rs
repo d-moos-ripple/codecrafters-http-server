@@ -19,12 +19,16 @@ impl<T: Startline> HttpMessage<T> {
 
 impl<T: Startline + Into<String>> Into<String> for HttpMessage<T> {
     fn into(self) -> String {
-        let header_string = self
+        let mut header_string = self
             .headers
             .iter()
             .map(|(k, v)| format!("{}: {}", k, v))
             .collect::<Vec<String>>()
             .join("\r\n");
+
+        if !header_string.is_empty() {
+            header_string.push_str("\r\n");
+        }
 
         format!(
             "{}\r\n{}\r\n{}",
@@ -47,12 +51,23 @@ mod tests {
 
     #[test]
     fn ok_response() {
-        let status_line = StatusLine::new(String::from("HTTP/1.1"), 404, String::from("Not Found"));
+        let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
         let response = HttpMessage::<StatusLine>::new(status_line, HashMap::new());
+
+        assert_eq!(Into::<String>::into(response), "HTTP/1.1 200 OK\r\n\r\n");
+    }
+
+    #[test]
+    fn ok_response_with_headers() {
+        let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
+        let response = HttpMessage::<StatusLine>::new(
+            status_line,
+            HashMap::from([("Foo".to_string(), "Bar".to_string())]),
+        );
 
         assert_eq!(
             Into::<String>::into(response),
-            "HTTP/1.1 404 Not Found\r\n\r\n"
+            "HTTP/1.1 200 OK\r\nFoo: Bar\r\n\r\n"
         );
     }
 }
