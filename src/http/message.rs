@@ -4,7 +4,7 @@ use std::collections::HashMap;
 pub(crate) struct HttpMessage<T: Startline> {
     pub start_line: T,
     headers: HashMap<String, String>,
-    _body: Option<u32>,
+    body: Option<String>,
 }
 
 impl<T: Startline> HttpMessage<T> {
@@ -12,7 +12,7 @@ impl<T: Startline> HttpMessage<T> {
         Self {
             start_line,
             headers,
-            _body: None,
+            body: None,
         }
     }
 }
@@ -34,7 +34,7 @@ impl<T: Startline + Into<String>> Into<String> for HttpMessage<T> {
             "{}\r\n{}\r\n{}",
             self.start_line.into(),
             header_string,
-            String::new()
+            self.body.unwrap_or(String::new())
         )
     }
 }
