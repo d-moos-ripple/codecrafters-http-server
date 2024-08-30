@@ -3,7 +3,7 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub(crate) struct HttpMessage<T: Startline> {
     pub start_line: T,
-    headers: HashMap<String, String>,
+    pub headers: HashMap<String, String>,
     body: Option<String>,
 }
 

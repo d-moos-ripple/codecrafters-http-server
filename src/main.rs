@@ -14,10 +14,13 @@ fn main() {
         .add("/echo/{yolo}".to_string(), Box::new(handle_echo))
         .expect("could not add endpoint");
 
-    // TODO: add / endpoint and retunr 200 (empty)
-    router
-        .add("/".to_string(), Box::new(handle_root))
-        .expect("could not add endpoint");
+        router
+            .add("/".to_string(), Box::new(handle_root))
+            .expect("could not add endpoint");
+
+        router
+            .add("/user-agent".to_string(), Box::new(handle_useragent))
+            .expect("could not add endpoint");
 
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
@@ -108,4 +111,18 @@ fn handle_root(_: &Request) -> Result<HttpMessage<StatusLine>> {
     let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
 
     Ok(HttpMessage::<StatusLine>::new(status_line, HashMap::new()))
+}
+
+fn handle_useragent(request: &Request)  -> Result<HttpMessage<StatusLine>> {
+    let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
+
+    let user_agent = request.headers.get("User-Agent").context("User-Agent header required")?;
+
+    let headers = HashMap::from([
+        ("Content-Type".to_string(), "text/plain".to_string()),
+        ("Content-Length".to_string(), user_agent.len().to_string()),
+    ]);
+    let mut message = HttpMessage::<StatusLine>::new(status_line, headers);
+    message.write(user_agent.clone());
+    Ok(message)
 }
