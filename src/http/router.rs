@@ -15,6 +15,9 @@ pub struct Router {
     endpoints: HashMap<String, Callback>,
 }
 
+unsafe impl Sync for Router {}
+unsafe impl Send for Router {}
+
 // { } wildcard pattern
 const PATTERN: &str = r"\{.*?\}";
 
