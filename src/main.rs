@@ -1,14 +1,21 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use http::{
-    message::{message::HttpMessage, request::Request, response::StatusLine},
+    message::{
+        message::HttpMessage,
+        request::{Method, Request},
+        response::StatusLine,
+    },
     router::Router,
 };
-use std::io::Read;
 use std::{
     collections::HashMap,
     path::Path,
     sync::{Arc, Mutex},
+};
+use std::{
+    fs,
+    io::{Read, Write},
 };
 use tokio::io::AsyncReadExt;
 use tokio::{
@@ -38,7 +45,9 @@ impl ApiContext {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    let ctx = Arc::new(Mutex::new(ApiContext::new(args.directory.unwrap_or_default())));
+    let ctx = Arc::new(Mutex::new(ApiContext::new(
+        args.directory.unwrap_or_default(),
+    )));
 
     let listener = TcpListener::bind("127.0.0.1:4221").await?;
 
@@ -55,19 +64,39 @@ async fn main() -> std::io::Result<()> {
 fn create_router(ctx: Arc<Mutex<ApiContext>>) -> Router {
     let mut router = Router::new(Box::new(not_found), ctx);
     router
-        .add("/echo/{yolo}".to_string(), Box::new(handle_echo))
+        .add(
+            Method::Get,
+            "/echo/{yolo}".to_string(),
+            Box::new(handle_echo),
+        )
         .expect("could not add endpoint");
 
     router
-        .add("/".to_string(), Box::new(handle_root))
+        .add(Method::Get, "/".to_string(), Box::new(handle_root))
         .expect("could not add endpoint");
 
     router
-        .add("/user-agent".to_string(), Box::new(handle_useragent))
+        .add(
+            Method::Get,
+            "/user-agent".to_string(),
+            Box::new(handle_useragent),
+        )
         .expect("could not add endpoint");
 
     router
-        .add("/files/{file_path}".to_string(), Box::new(handle_file))
+        .add(
+            Method::Get,
+            "/files/{file_path}".to_string(),
+            Box::new(handle_file),
+        )
+        .expect("could not add endpoint");
+
+    router
+        .add(
+            Method::Post,
+            "/files/{file_path}".to_string(),
+            Box::new(handle_create_file),
+        )
         .expect("could not add endpoint");
 
     router
@@ -114,7 +143,11 @@ async fn process_socket(mut socket: TcpStream, router: &Router) {
 
     // TODO:
     // implement endpoint routing
-    let response_raw = router.execute(&request.start_line.target, &request);
+    let response_raw = router.execute(
+        request.start_line.method,
+        &request.start_line.target,
+        &request,
+    );
     // convert into raw response
     let response = Into::<String>::into(response_raw);
     println!("{:?}", response);
@@ -203,4 +236,22 @@ fn handle_file(
     ]);
 
     Ok(HttpMessage::<StatusLine>::ok(headers, Some(buffer)))
+}
+
+fn handle_create_file(
+    request: &Request,
+    file_name: String,
+    ctx: &Arc<Mutex<ApiContext>>,
+) -> Result<HttpMessage<StatusLine>> {
+    let locked_ctx = ctx.lock().expect("could not lock ctx");
+    let path = Path::new(&locked_ctx.dir).join(file_name);
+    let mut file_handle = fs::File::create_new(path).expect("could not create file");
+
+    if let Some(body) = &request.body {
+        file_handle
+            .write_all(body.as_bytes())
+            .expect("could not write to file");
+    }
+
+    Ok(HttpMessage::<StatusLine>::created(HashMap::new(), None))
 }

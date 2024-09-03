@@ -3,15 +3,17 @@ use anyhow::{bail, Context, Result};
 
 pub type Request = HttpMessage<RequestLine>;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Method {
     Get,
+    Post,
 }
 
 impl Into<String> for Method {
     fn into(self) -> String {
         match self {
             Method::Get => "GET".to_string(),
+            Method::Post => "POST".to_string(),
         }
     }
 }
@@ -22,6 +24,7 @@ impl TryFrom<String> for Method {
     fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         match value.as_str() {
             "GET" => Ok(Method::Get),
+            "POST" => Ok(Method::Post),
             _ => bail!("invalid input"),
         }
     }

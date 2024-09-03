@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{bail, Context};
+use anyhow::{bail, Context, Result};
 
 use super::{
     request::{Request, RequestLine},
@@ -13,7 +13,7 @@ pub trait Startline {}
 pub(crate) struct HttpMessage<T: Startline> {
     pub start_line: T,
     pub headers: HashMap<String, String>,
-    body: Option<String>,
+    pub body: Option<String>,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -41,11 +41,11 @@ impl TryFrom<String> for Version {
 }
 
 impl<T: Startline> HttpMessage<T> {
-    pub fn new(start_line: T, headers: HashMap<String, String>) -> Self {
+    pub fn new(start_line: T, headers: HashMap<String, String>, body: Option<String>) -> Self {
         Self {
             start_line,
             headers,
-            body: None,
+            body,
         }
     }
 
@@ -85,6 +85,14 @@ impl HttpMessage<StatusLine> {
         }
     }
 
+    pub fn created(headers: HashMap<String, String>, body: Option<String>) -> Self {
+        HttpMessage::<StatusLine> {
+            headers,
+            start_line: StatusLine::new(Version::Http1_1, Status::Successful(Successful::Created)),
+            body,
+        }
+    }
+
     pub fn not_found() -> Self {
         HttpMessage::<StatusLine> {
             headers: HashMap::new(),
@@ -111,24 +119,33 @@ impl TryFrom<String> for HttpMessage<RequestLine> {
     type Error = anyhow::Error;
 
     fn try_from(value: String) -> anyhow::Result<Self, Self::Error> {
+        // POST /SIUUU HTTP/1.1 \r\n
+        // [Headers] \r\n
+        // [BODY]
+
         let (raw_request_line, remaining) = value
             .split_once("\r\n")
             .context("could not read request_line")?;
 
         let request_line: RequestLine = raw_request_line.to_string().try_into()?;
 
-        // get headers section
+        // get headers (and possible body) section
         let mut headers: HashMap<String, String> = HashMap::new();
+        let mut body: Option<String> = None;
         if &remaining[..4] != "\r\n" {
-            let (header_section, _) = remaining
+            let (header_section, remaining) = remaining
                 .split_once("\r\n\r\n")
                 .context("could not read headers")?;
             headers = parse_headers(header_section)?;
+
+            // normally we would need to deal with the content type as well, but for now let's just stick with the length
+            if let Some(content_length) = headers.get("Content-Length") {
+                let len = content_length.parse::<usize>()?;
+                body = Some(remaining[..len].to_string());
+            }
         }
 
-        // lets skip the body for now...
-
-        Ok(Request::new(request_line, headers))
+        Ok(Request::new(request_line, headers, body))
     }
 }
 
@@ -152,6 +169,7 @@ mod tests {
 
     use crate::http::message::{
         message::{parse_headers, Version},
+        request::{Method, Request},
         response::{Status, StatusLine, Successful},
     };
 
@@ -160,7 +178,7 @@ mod tests {
     #[test]
     fn ok_response() {
         let status_line = StatusLine::new(Version::Http1_1, Status::Successful(Successful::Ok));
-        let response = HttpMessage::<StatusLine>::new(status_line, HashMap::new());
+        let response = HttpMessage::<StatusLine>::new(status_line, HashMap::new(), None);
 
         assert_eq!(Into::<String>::into(response), "HTTP/1.1 200 OK\r\n\r\n");
     }
@@ -171,11 +189,29 @@ mod tests {
         let response = HttpMessage::<StatusLine>::new(
             status_line,
             HashMap::from([("Foo".to_string(), "Bar".to_string())]),
+            None,
         );
 
         assert_eq!(
             Into::<String>::into(response),
             "HTTP/1.1 200 OK\r\nFoo: Bar\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn request_with_headers_and_body() {
+        let request = "POST /files/number HTTP/1.1\r\nContent-Length: 5\r\n\r\nHallo";
+
+        let message: Request = TryFrom::<String>::try_from(request.to_string()).unwrap();
+
+        assert_eq!(message.start_line.method, Method::Post);
+        assert_eq!(message.start_line.target, "/files/number");
+        assert_eq!(message.start_line.version, Version::Http1_1);
+
+        assert_eq!(message.body, Some("Hallo".to_string()));
+        assert_eq!(
+            message.headers,
+            HashMap::from([("Content-Length".to_string(), "5".to_string())])
         );
     }
 

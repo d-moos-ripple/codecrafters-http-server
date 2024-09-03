@@ -7,7 +7,10 @@ use std::{
 
 use crate::ApiContext;
 
-use super::message::{request::Request, response::Response};
+use super::message::{
+    request::{Method, Request},
+    response::Response,
+};
 
 type Callback = Box<dyn Fn(&Request, String, &Arc<Mutex<ApiContext>>) -> Result<Response>>;
 
@@ -36,7 +39,8 @@ impl Router {
         }
     }
 
-    pub fn add(&mut self, endpoint: String, handler: Callback) -> Result<()> {
+    pub fn add(&mut self, method: Method, endpoint: String, handler: Callback) -> Result<()> {
+        let route = Router::route_identifier(method, &endpoint);
         if self.endpoints.contains_key(&endpoint) {
             anyhow::bail!("endpoint already registered");
         }
@@ -50,12 +54,12 @@ impl Router {
     // executes a request
     // if no sufficient target is found, default will be executed
     // if any handler fails, an internal server error is returned
-    pub fn execute(&self, target: &String, request: &Request) -> Response {
+    pub fn execute(&self, method: Method, target: &String, request: &Request) -> Response {
         // todo pass actual matched wildcard (if any)
         let route = self
             .endpoints
             .iter()
-            .map(|(p, c)| (Router::match_target(p, target), c)) // find matching endpoints
+            .map(|(p, c)| (Router::match_route(p, method, target), c)) // find matching endpoints
             .filter(|(m, _)| matches!(m, RouteMatch::Match(_)))
             // select the first match
             .next();
@@ -74,8 +78,9 @@ impl Router {
         callback(request, replaced_path, &self.ctx).unwrap_or(Response::internal_error())
     }
 
-    fn match_target(path: &String, target: &String) -> RouteMatch {
+    fn match_route(path: &String, method: Method, target: &String) -> RouteMatch {
         let regex = Regex::new(PATTERN).expect("regex issue");
+        let route = Router::route_identifier(method, target);
         if regex.is_match(path) {
             // our registered endpoint is a wildcard
 
@@ -86,16 +91,26 @@ impl Router {
                 .to_string();
 
             let actual_route_regex = Regex::new(pattern.as_str()).expect("invalid regex");
-            if let Some(captures) = actual_route_regex.captures(target) {
+            if let Some(captures) = actual_route_regex.captures(&route) {
                 return RouteMatch::Match(Some(captures.get(1).unwrap().as_str().to_string()));
             }
         } else {
             // endpoint is static
-            if path == target {
+            if path == &route {
                 return RouteMatch::Match(None);
             }
         }
 
         RouteMatch::NoMatch
+    }
+
+    fn route_identifier(method: Method, target: &String) -> String {
+        let mut identifier = String::new();
+        let method = Into::<String>::into(method);
+
+        identifier.push_str(&method);
+        identifier.push_str(target);
+
+        identifier
     }
 }

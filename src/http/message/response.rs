@@ -29,6 +29,7 @@ impl Into<String> for Status {
         match self {
             Status::Successful(s) => match s {
                 Successful::Ok => "OK".to_string(),
+                Successful::Created => "Created".to_string(),
             },
             Status::ClientError(c) => match c {
                 ClientError::NotFound => "Not Found".to_string(),
@@ -44,6 +45,7 @@ impl Into<String> for Status {
 #[repr(u8)]
 pub enum Successful {
     Ok = 0,
+    Created = 1,
 }
 
 #[derive(Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive, Clone, Copy)]
