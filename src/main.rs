@@ -1,32 +1,61 @@
 use anyhow::{Context, Result};
-use http::{message::HttpMessage, request::Request, response::StatusLine, router::Router};
-use std::borrow::BorrowMut;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use clap::Parser;
+use http::{
+    message::{message::HttpMessage, request::Request, response::StatusLine},
+    router::Router,
+};
+use std::io::Read;
+use std::{
+    borrow::Borrow,
+    collections::HashMap,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 use tokio::io::AsyncReadExt;
 use tokio::{
     io::AsyncWriteExt,
-    net::{TcpListener, TcpSocket, TcpStream},
+    net::{TcpListener, TcpStream},
 };
 
 mod http;
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    directory: String,
+}
+
+struct ApiContext {
+    dir: String,
+}
+
+impl ApiContext {
+    fn new(dir: String) -> Self {
+        Self { dir }
+    }
+}
+
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    let args = Args::parse();
+    let ctx = Arc::new(Mutex::new(ApiContext::new(args.directory)));
+
     let listener = TcpListener::bind("127.0.0.1:4221").await?;
 
     loop {
+        let context = Arc::clone(&ctx);
+
         let (socket, _) = listener.accept().await?;
         tokio::spawn(async move {
-            process_socket(socket, &create_router()).await;
+            process_socket(socket, &create_router(context)).await;
         });
     }
 }
 
-fn create_router() -> Router {
-    let mut router = Router::new(Box::new(not_found));
-
-
+fn create_router(ctx: Arc<Mutex<ApiContext>>) -> Router {
+    let mut router = Router::new(Box::new(not_found), ctx);
     router
         .add("/echo/{yolo}".to_string(), Box::new(handle_echo))
         .expect("could not add endpoint");
@@ -37,6 +66,10 @@ fn create_router() -> Router {
 
     router
         .add("/user-agent".to_string(), Box::new(handle_useragent))
+        .expect("could not add endpoint");
+
+    router
+        .add("/file/{file_path}".to_string(), Box::new(handle_file))
         .expect("could not add endpoint");
 
     router
@@ -84,7 +117,6 @@ async fn process_socket(mut socket: TcpStream, router: &Router) {
     // TODO:
     // implement endpoint routing
     let response_raw = router.execute(&request.start_line.target, &request);
-
     // convert into raw response
     let response = Into::<String>::into(response_raw);
     println!("{:?}", response);
@@ -95,42 +127,43 @@ async fn process_socket(mut socket: TcpStream, router: &Router) {
         .expect("could not send response");
 }
 
-fn not_found(_: &Request) -> Result<HttpMessage<StatusLine>> {
-    let status_line = StatusLine::new(String::from("HTTP/1.1"), 404, String::from("Not Found"));
+fn not_found(
+    _: &Request,
+    _: String,
+    _: &Arc<Mutex<ApiContext>>,
+) -> Result<HttpMessage<StatusLine>> {
+    Ok(HttpMessage::<StatusLine>::not_found())
+}
 
-    Ok(HttpMessage::<StatusLine>::new(
-        status_line,
-        HashMap::default(),
+fn handle_echo(
+    _: &Request,
+    echo: String,
+    _: &Arc<Mutex<ApiContext>>,
+) -> Result<HttpMessage<StatusLine>> {
+    let headers = HashMap::from([
+        ("Content-Type".to_string(), "text/plain".to_string()),
+        ("Content-Length".to_string(), echo.len().to_string()),
+    ]);
+
+    Ok(HttpMessage::<StatusLine>::ok(
+        headers,
+        Some(echo.to_string()),
     ))
 }
 
-fn handle_echo(request: &Request) -> Result<HttpMessage<StatusLine>> {
-    // cheating. :) let's improve so that we receive the path-wildcard as an argument
-    let (_, input) = request.start_line.target[1..]
-        .split_once("/")
-        .context("could not parse the input")?;
-
-    let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
-    let headers = HashMap::from([
-        ("Content-Type".to_string(), "text/plain".to_string()),
-        ("Content-Length".to_string(), input.len().to_string()),
-    ]);
-
-    let mut message = HttpMessage::<StatusLine>::new(status_line, headers);
-    message.write(input.to_string());
-
-    Ok(message)
+fn handle_root(
+    _: &Request,
+    _: String,
+    _: &Arc<Mutex<ApiContext>>,
+) -> Result<HttpMessage<StatusLine>> {
+    Ok(HttpMessage::<StatusLine>::ok(HashMap::new(), None))
 }
 
-fn handle_root(_: &Request) -> Result<HttpMessage<StatusLine>> {
-    let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
-
-    Ok(HttpMessage::<StatusLine>::new(status_line, HashMap::new()))
-}
-
-fn handle_useragent(request: &Request) -> Result<HttpMessage<StatusLine>> {
-    let status_line = StatusLine::new(String::from("HTTP/1.1"), 200, String::from("OK"));
-
+fn handle_useragent(
+    request: &Request,
+    _: String,
+    _: &Arc<Mutex<ApiContext>>,
+) -> Result<HttpMessage<StatusLine>> {
     let user_agent = request
         .headers
         .get("User-Agent")
@@ -140,7 +173,35 @@ fn handle_useragent(request: &Request) -> Result<HttpMessage<StatusLine>> {
         ("Content-Type".to_string(), "text/plain".to_string()),
         ("Content-Length".to_string(), user_agent.len().to_string()),
     ]);
-    let mut message = HttpMessage::<StatusLine>::new(status_line, headers);
+
+    let mut message = HttpMessage::<StatusLine>::ok(headers, None);
     message.write(user_agent.clone());
     Ok(message)
+}
+
+fn handle_file(
+    _: &Request,
+    file_name: String,
+    ctx: &Arc<Mutex<ApiContext>>,
+) -> Result<HttpMessage<StatusLine>> {
+    let locked_ctx = ctx.lock().expect("could not lock ctx");
+    let file_path = Path::new(&locked_ctx.dir).join(file_name);
+
+    // check if file exist
+    let file_handle = std::fs::File::open(file_path.to_str().unwrap());
+    if file_handle.is_err() {
+        return Ok(HttpMessage::<StatusLine>::not_found());
+    }
+
+    let mut buffer = String::new();
+    let file_content = file_handle.unwrap().read_to_string(&mut buffer).unwrap();
+    let headers = HashMap::from([
+        (
+            "Content-Type".to_string(),
+            "application/octet-stream".to_string(),
+        ),
+        ("Content-Length".to_string(), file_content.to_string()),
+    ]);
+
+    Ok(HttpMessage::<StatusLine>::ok(headers, Some(buffer)))
 }

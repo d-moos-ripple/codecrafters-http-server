@@ -1,24 +1,25 @@
 use anyhow::Result;
 use regex::Regex;
-use std::collections::HashMap;
-
-use super::{
-    message::HttpMessage,
-    request::Request,
-    response::{Response, StatusLine},
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
 
-type Callback = Box<dyn Fn(&Request) -> Result<Response>>;
+use crate::ApiContext;
+
+use super::message::{request::Request, response::Response};
+
+type Callback = Box<dyn Fn(&Request, String, &Arc<Mutex<ApiContext>>) -> Result<Response>>;
 
 pub struct Router {
     default: Callback,
     endpoints: HashMap<String, Callback>,
+    ctx: Arc<Mutex<ApiContext>>,
 }
 
 unsafe impl Sync for Router {}
 unsafe impl Send for Router {}
 
-// { } wildcard pattern
 const PATTERN: &str = r"\{.*?\}";
 
 enum RouteMatch {
@@ -27,10 +28,11 @@ enum RouteMatch {
 }
 
 impl Router {
-    pub fn new(default: Callback) -> Self {
+    pub fn new(default: Callback, ctx: Arc<Mutex<ApiContext>>) -> Self {
         Self {
             default,
             endpoints: HashMap::default(),
+            ctx,
         }
     }
 
@@ -49,29 +51,27 @@ impl Router {
     // if no sufficient target is found, default will be executed
     // if any handler fails, an internal server error is returned
     pub fn execute(&self, target: &String, request: &Request) -> Response {
-        let internal_server_error = HttpMessage::<StatusLine>::new(
-            StatusLine::new(
-                "HTTP/1.1".to_string(),
-                500,
-                "Internal Server Error".to_string(),
-            ),
-            HashMap::default(),
-        );
-
         // todo pass actual matched wildcard (if any)
-        let callback = self
+        let route = self
             .endpoints
             .iter()
             .map(|(p, c)| (Router::match_target(p, target), c)) // find matching endpoints
             .filter(|(m, _)| matches!(m, RouteMatch::Match(_)))
             // select the first match
-            .next()
-            // return only the callback
-            .map(|(_, c)| c)
-            // fall-back to default handler if no matching is provided
-            .unwrap_or(&self.default);
+            .next();
 
-        callback(request).unwrap_or(internal_server_error)
+        let (replaced_path, callback) =
+            route.map_or((String::new(), &self.default), |(route_match, cb)| {
+                (
+                    match route_match {
+                        RouteMatch::Match(m) => m.unwrap_or(String::new()),
+                        RouteMatch::NoMatch => String::new(),
+                    },
+                    cb,
+                )
+            });
+
+        callback(request, replaced_path, &self.ctx).unwrap_or(Response::internal_error())
     }
 
     fn match_target(path: &String, target: &String) -> RouteMatch {
@@ -82,7 +82,7 @@ impl Router {
             // create a regex pattern based on the wildcard endpoint
             let re = Regex::new(r"\{[^{}]*\}").expect("invalid regex");
             let pattern = re
-                .replace_all(path.replace("/", r"\/").as_str(), r"(.*?)")
+                .replace_all(path.replace("/", r"\/").as_str(), r"(.+)")
                 .to_string();
 
             let actual_route_regex = Regex::new(pattern.as_str()).expect("invalid regex");

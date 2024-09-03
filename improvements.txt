@@ -1,0 +1,3 @@
+- pass route wildcards as a list of arguments to handlers (do parsing once)
+- re-use the same routing-table
+- create response abstraction (esp. for well known status codes)
