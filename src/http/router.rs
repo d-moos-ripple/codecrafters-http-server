@@ -41,12 +41,12 @@ impl Router {
 
     pub fn add(&mut self, method: Method, endpoint: String, handler: Callback) -> Result<()> {
         let route = Router::route_identifier(method, &endpoint);
-        if self.endpoints.contains_key(&endpoint) {
+        if self.endpoints.contains_key(&route) {
             anyhow::bail!("endpoint already registered");
         }
 
         // will never return Some as we pre-check above
-        self.endpoints.insert(endpoint, handler);
+        self.endpoints.insert(route, handler);
 
         Ok(())
     }
