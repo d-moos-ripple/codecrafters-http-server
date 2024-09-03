@@ -22,7 +22,7 @@ mod http;
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(short, long)]
-    directory: String,
+    directory: Option<String>,
 }
 
 struct ApiContext {
@@ -38,7 +38,7 @@ impl ApiContext {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    let ctx = Arc::new(Mutex::new(ApiContext::new(args.directory)));
+    let ctx = Arc::new(Mutex::new(ApiContext::new(args.directory.unwrap_or_default())));
 
     let listener = TcpListener::bind("127.0.0.1:4221").await?;
 
