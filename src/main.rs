@@ -6,10 +6,8 @@ use http::{
 };
 use std::io::Read;
 use std::{
-    borrow::Borrow,
     collections::HashMap,
-    path::{Path, PathBuf},
-    rc::Rc,
+    path::Path,
     sync::{Arc, Mutex},
 };
 use tokio::io::AsyncReadExt;
@@ -69,7 +67,7 @@ fn create_router(ctx: Arc<Mutex<ApiContext>>) -> Router {
         .expect("could not add endpoint");
 
     router
-        .add("/file/{file_path}".to_string(), Box::new(handle_file))
+        .add("/files/{file_path}".to_string(), Box::new(handle_file))
         .expect("could not add endpoint");
 
     router
@@ -185,10 +183,11 @@ fn handle_file(
     ctx: &Arc<Mutex<ApiContext>>,
 ) -> Result<HttpMessage<StatusLine>> {
     let locked_ctx = ctx.lock().expect("could not lock ctx");
-    let file_path = Path::new(&locked_ctx.dir).join(file_name);
+    let path = Path::new(&locked_ctx.dir).join(file_name);
+    let file_path = path.to_str().unwrap();
 
     // check if file exist
-    let file_handle = std::fs::File::open(file_path.to_str().unwrap());
+    let file_handle = std::fs::File::open(file_path);
     if file_handle.is_err() {
         return Ok(HttpMessage::<StatusLine>::not_found());
     }
